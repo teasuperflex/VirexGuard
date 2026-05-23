@@ -1,0 +1,108 @@
+loadstring(game:HttpGet("https://arabhub.store/universal"))()
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GunClient
+pcall(function()
+    GunClient = require(ReplicatedStorage.Gun.Scripts.GunClient)
+end)
+local UtilsModule
+pcall(function()
+    UtilsModule = require(ReplicatedStorage.Gun.Scripts.Utils)
+end)
+
+if GunClient then
+    if GunClient.getBulletSpread then
+        GunClient.getBulletSpread = function()
+            return 0
+        end
+    end
+    if GunClient.updateSpreadMult then
+        GunClient.updateSpreadMult = function()
+        end
+    end
+end
+
+if UtilsModule then
+    local targetTable = UtilsModule
+    if UtilsModule.randomUtils then
+        targetTable = UtilsModule.randomUtils
+    end
+    if targetTable.applySpreadToDirection then
+        targetTable.applySpreadToDirection = function(direction, spread)
+            return direction
+        end
+    end
+    if targetTable.applyGaussianSpreadToDirection then
+        targetTable.applyGaussianSpreadToDirection = function(direction, spread)
+            return direction
+        end
+    end
+end
+
+local RecoilHandler = require(game:GetService("ReplicatedStorage").Gun.Scripts.RecoilHandler)
+table.clear(RecoilHandler)
+
+local tweenService = game:GetService("TweenService")
+local playersService = game:GetService("Players")
+local userInputService = game:GetService("UserInputService")
+local replicatedStorageService = game:GetService("ReplicatedStorage")
+local _ = require(game:GetService("ReplicatedStorage").Gun.Types)
+
+local gamepadInputTypes = {
+    Enum.UserInputType.Gamepad1, Enum.UserInputType.Gamepad2, Enum.UserInputType.Gamepad3,
+    Enum.UserInputType.Gamepad4, Enum.UserInputType.Gamepad5, Enum.UserInputType.Gamepad6,
+    Enum.UserInputType.Gamepad7, Enum.UserInputType.Gamepad8
+}
+
+local currentCamera = workspace.CurrentCamera
+local localPlayer = playersService.LocalPlayer
+
+RecoilHandler.__index = RecoilHandler
+RecoilHandler.new = function(xFunction, yFunction, startingPoint, step, degreesPerUnit)
+    local recoilFunctionInstance = setmetatable({}, RecoilHandler)
+    recoilFunctionInstance.XFunction = xFunction
+    recoilFunctionInstance.YFunction = yFunction
+    recoilFunctionInstance.StartingPoint = startingPoint or 0
+    recoilFunctionInstance.Step = step or 1
+    recoilFunctionInstance.DegreesPerUnit = degreesPerUnit or 5
+    recoilFunctionInstance.RadiansPerUnit = math.rad(recoilFunctionInstance.DegreesPerUnit)
+    recoilFunctionInstance.RecoilMultiplier = 0
+    recoilFunctionInstance:reset()
+    return recoilFunctionInstance
+end
+
+RecoilHandler.fromRecoilInfo = function(recoilInfo)
+    return RecoilHandler.new(
+        recoilInfo.XFunction,
+        recoilInfo.YFunction,
+        recoilInfo.StartingPoint,
+        recoilInfo.Step,
+        recoilInfo.DegreesPerUnit
+    )
+end
+
+RecoilHandler.setRecoilMultiplier = function(recoilInfo, multiplier)
+    recoilInfo.RecoilMultiplier = multiplier
+end
+
+RecoilHandler.reset = function(recoilInstance)
+    recoilInstance.CurrentStep = recoilInstance.StartingPoint
+    recoilInstance.PreviousX = recoilInstance.XFunction(recoilInstance.CurrentStep)
+    recoilInstance.PreviousY = recoilInstance.YFunction(recoilInstance.CurrentStep)
+end
+
+RecoilHandler.getFinalRecoilMultiplier = function(recoilInfo)
+    return 0
+end
+
+RecoilHandler.nextStep = function(recoilInstance)
+    recoilInstance.CurrentStep = recoilInstance.CurrentStep + recoilInstance.Step
+    local currentX = recoilInstance.XFunction(recoilInstance.CurrentStep)
+    local currentY = recoilInstance.YFunction(recoilInstance.CurrentStep)
+    recoilInstance.PreviousX = currentX
+    recoilInstance.PreviousY = currentY
+end
+
+return RecoilHandler
+
+print("ааа сиксевен ааа 67 67 67 67 67 67 67")
