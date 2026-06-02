@@ -1,0 +1,348 @@
+local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
+
+-- Интегрирован ваш кусок кода с корректным названием
+local Window = Rayfield:CreateWindow({
+   Name = "Mellstroy Client",
+   LoadingTitle = "Loading Client...",
+   LoadingSubtitle = "by Gemini",
+   ConfigurationSaving = {
+      Enabled = false
+   },
+   KeySystem = false
+})
+
+-- Создание вкладок
+local VisualsTab = Window:CreateTab("Visuals", nil)
+local CombatTab = Window:CreateTab("Combat", nil)
+
+-- Переменные ESP
+local ESP_Boxes = false
+local ESP_Names = false
+local ESP_Distance = false
+local ESP_Health = false
+local BoxColor = Color3.fromRGB(255, 255, 255)
+
+-- Переменные Аимбота
+local AimbotEnabled = false
+local AimbotSmoothness = 5 -- Значение плавности
+local FOVRadius = 150
+local FOVColor = Color3.fromRGB(255, 0, 0)
+
+local AimBindStr = "E" 
+local AimMode = "Hold" 
+local AimbotActiveState = false 
+
+-- Сервисы Roblox
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Отрисовка круга FOV
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 2
+FOVCircle.Color = FOVColor
+FOVCircle.Filled = false
+FOVCircle.Radius = FOVRadius
+FOVCircle.Visible = false
+
+local ESP_Data = {}
+
+-- Функции для ESP
+local function CreateESP(player)
+    if player == LocalPlayer then return end
+    
+    local Box = Drawing.new("Square")
+    Box.Visible = false
+    Box.Color = BoxColor
+    Box.Thickness = 1
+    Box.Filled = false
+    Box.Transparency = 1
+    
+    local Name = Drawing.new("Text")
+    Name.Visible = false
+    Name.Text = player.Name
+    Name.Color = Color3.fromRGB(255, 255, 255)
+    Name.Center = true
+    Name.Outline = true
+    Name.Size = 14
+    
+    local Distance = Drawing.new("Text")
+    Distance.Visible = false
+    Distance.Color = Color3.fromRGB(255, 255, 255)
+    Distance.Center = true
+    Distance.Outline = true
+    Distance.Size = 14
+
+    local HealthLine = Drawing.new("Line")
+    HealthLine.Visible = false
+    HealthLine.Thickness = 1.3
+    
+    ESP_Data[player] = {Box = Box, Name = Name, Distance = Distance, HealthLine = HealthLine}
+end
+
+local function RemoveESP(player)
+    if ESP_Data[player] then
+        ESP_Data[player].Box:Remove()
+        ESP_Data[player].Name:Remove()
+        ESP_Data[player].Distance:Remove()
+        ESP_Data[player].HealthLine:Remove()
+        ESP_Data[player] = nil
+    end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do CreateESP(p) end
+Players.PlayerAdded:Connect(CreateESP)
+Players.PlayerRemoving:Connect(RemoveESP)
+
+-- Поиск ближайшего игрока в FOV
+local function GetClosestPlayer()
+    local Target = nil
+    local ShortestDistance = FOVRadius
+
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character then
+            local Head = Player.Character:FindFirstChild("Head")
+            local Humanoid = Player.Character:FindFirstChildOfClass("Humanoid")
+            
+            if Head and Humanoid and Humanoid.Health > 0 then
+                local HeadPos, OnScreen = Camera:WorldToViewportPoint(Head.Position)
+                if OnScreen then
+                    local MousePos = UserInputService:GetMouseLocation()
+                    local Distance = (Vector2.new(HeadPos.X, HeadPos.Y) - MousePos).Magnitude
+                    if Distance < ShortestDistance then
+                        ShortestDistance = Distance
+                        Target = Player
+                    end
+                end
+            end
+        end
+    end
+    return Target
+end
+
+-- Проверка нажатия бинда
+local function IsAimKeyPressed(input)
+    if AimBindStr == "MouseButton1" and input.UserInputType == Enum.UserInputType.MouseButton1 then
+        return true
+    elseif AimBindStr == "MouseButton2" and input.UserInputType == Enum.UserInputType.MouseButton2 then
+        return true
+    elseif AimBindStr == "MouseButton3" and input.UserInputType == Enum.UserInputType.MouseButton3 then
+        return true
+    else
+        local success, keyCodeEnum = pcall(function() return Enum.KeyCode[AimBindStr] end)
+        if success and input.KeyCode == keyCodeEnum then
+            return true
+        end
+    end
+    return false
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if IsAimKeyPressed(input) then
+        if AimMode == "Hold" then
+            AimbotActiveState = true
+        elseif AimMode == "Toggle" then
+            AimbotActiveState = not AimbotActiveState
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if IsAimKeyPressed(input) then
+        if AimMode == "Hold" then
+            AimbotActiveState = false
+        end
+    end
+end)
+
+-- Единый цикл рендера
+RunService.RenderStepped:Connect(function()
+    local MousePos = UserInputService:GetMouseLocation()
+    FOVCircle.Position = MousePos
+    FOVCircle.Radius = FOVRadius
+    FOVCircle.Color = FOVColor
+    FOVCircle.Visible = AimbotEnabled
+
+    local shouldAim = false
+    if AimbotEnabled then
+        if AimMode == "Always" then
+            shouldAim = true
+        else
+            shouldAim = AimbotActiveState
+        end
+    end
+
+    -- Переработанная плавная доводка аимбота
+    if shouldAim then
+        local Target = GetClosestPlayer()
+        if Target and Target.Character and Target.Character:FindFirstChild("Head") then
+            local TargetCFrame = CFrame.new(Camera.CFrame.Position, Target.Character.Head.Position)
+            -- Плавность теперь корректно работает через измененный коэффициент сглаживания
+            local t = 1 / math.max(AimbotSmoothness, 1)
+            Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, t)
+        end
+    end
+
+    -- Логика ESP
+    for player, data in pairs(ESP_Data) do
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and player.Character:FindFirstChild("Head") and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            local hrp = player.Character.HumanoidRootPart
+            local head = player.Character.Head
+            local hum = player.Character.Humanoid
+            
+            local hrpPos, hrpOnScreen = Camera:WorldToViewportPoint(hrp.Position)
+            
+            if hrpOnScreen then
+                local headPos = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                local legPos = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
+                
+                local height = math.abs(headPos.Y - legPos.Y)
+                local width = height / 1.5
+                
+                local x = hrpPos.X - width / 2
+                local y = headPos.Y
+
+                if ESP_Boxes then
+                    data.Box.Position = Vector2.new(x, y)
+                    data.Box.Size = Vector2.new(width, height)
+                    data.Box.Color = BoxColor
+                    data.Box.Visible = true
+                else
+                    data.Box.Visible = false
+                end
+                
+                if ESP_Names then
+                    data.Name.Position = Vector2.new(hrpPos.X, y - 16)
+                    data.Name.Visible = true
+                else
+                    data.Name.Visible = false
+                end
+                
+                -- Отображение дистанции строго в метрах (XXm)
+                if ESP_Distance then
+                    local studsDist = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) or 0
+                    local metersDist = math.floor(studsDist / 20)
+                    data.Distance.Text = tostring(metersDist) .. "m"
+                    data.Distance.Position = Vector2.new(hrpPos.X, y + height + 2)
+                    data.Distance.Visible = true
+                else
+                    data.Distance.Visible = false
+                end
+                
+                if ESP_Health then
+                    local healthPct = hum.Health / hum.MaxHealth
+                    data.HealthLine.From = Vector2.new(x - 5, y + height)
+                    data.HealthLine.To = Vector2.new(x - 5, y + (height * (1 - healthPct)))
+                    data.HealthLine.Color = Color3.fromRGB(255 * (1 - healthPct), 255 * healthPct, 0)
+                    data.HealthLine.Visible = true
+                else
+                    data.HealthLine.Visible = false
+                end
+            else
+                data.Box.Visible = false
+                data.Name.Visible = false
+                data.Distance.Visible = false
+                data.HealthLine.Visible = false
+            end
+        else
+            data.Box.Visible = false
+            data.Name.Visible = false
+            data.Distance.Visible = false
+            data.HealthLine.Visible = false
+        end
+    end
+end)
+
+-- Создание элементов управления во вкладке Visuals
+VisualsTab:CreateToggle({
+   Name = "Enable Boxes (2D)",
+   CurrentValue = false,
+   Callback = function(Value) ESP_Boxes = Value end,
+})
+
+VisualsTab:CreateColorPicker({
+    Name = "Box Color",
+    Color = Color3.fromRGB(255,255,255),
+    Callback = function(Value) BoxColor = Value end
+})
+
+VisualsTab:CreateToggle({
+   Name = "Enable Names",
+   CurrentValue = false,
+   Callback = function(Value) ESP_Names = Value end,
+})
+
+VisualsTab:CreateToggle({
+   Name = "Enable Distance",
+   CurrentValue = false,
+   Callback = function(Value) ESP_Distance = Value end,
+})
+
+VisualsTab:CreateToggle({
+   Name = "Enable Health Bar",
+   CurrentValue = false,
+   Callback = function(Value) ESP_Health = Value end,
+})
+
+-- Создание элементов управления во вкладке Combat (Исправлен синтаксис на Default)
+CombatTab:CreateToggle({
+   Name = "Enable Aimbot Master",
+   CurrentValue = false,
+   Callback = function(Value) AimbotEnabled = Value end,
+})
+
+CombatTab:CreateDropdown({
+   Name = "Aimbot Mode",
+   Options = {"Hold", "Toggle", "Always"},
+   CurrentOption = "Hold",
+   MultipleOptions = false,
+   Callback = function(Option)
+      AimMode = Option[1] or Option
+      AimbotActiveState = false
+   end,
+})
+
+CombatTab:CreateKeybind({
+   Name = "Aimbot Keybind",
+   CurrentKeybind = "E", 
+   HoldToInteract = false,
+   Callback = function(Keybind)
+      AimBindStr = tostring(Keybind)
+   end,
+})
+
+-- Исправлена критическая ошибка: CurrentValue заменено на Default
+CombatTab:CreateSlider({
+   Name = "Aimbot Smoothness",
+   Min = 1,
+   Max = 50,
+   Default = 5,
+   Increment = 1,
+   Suffix = " smoothness",
+   Callback = function(Value) 
+      AimbotSmoothness = Value 
+   end,
+})
+
+CombatTab:CreateSlider({
+   Name = "FOV Circle Size",
+   Min = 10,
+   Max = 500,
+   Default = 150,
+   Increment = 5,
+   Suffix = "px",
+   Callback = function(Value) 
+      FOVRadius = Value 
+   end,
+})
+
+CombatTab:CreateColorPicker({
+    Name = "FOV Circle Color",
+    Color = Color3.fromRGB(255,0,0),
+    Callback = function(Value) 
+       FOVColor = Value 
+    end
+})
