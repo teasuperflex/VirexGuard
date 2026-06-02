@@ -1,6 +1,5 @@
 local Rayfield = loadstring(game:HttpGet('https://sirius.menu/rayfield'))()
 
--- Интегрирован ваш кусок кода с корректным названием
 local Window = Rayfield:CreateWindow({
    Name = "Mellstroy Client",
    LoadingTitle = "Loading Client...",
@@ -24,7 +23,7 @@ local BoxColor = Color3.fromRGB(255, 255, 255)
 
 -- Переменные Аимбота
 local AimbotEnabled = false
-local AimbotSmoothness = 5 -- Значение плавности
+local AimbotSmoothness = 5 
 local FOVRadius = 150
 local FOVColor = Color3.fromRGB(255, 0, 0)
 
@@ -158,7 +157,7 @@ UserInputService.InputEnded:Connect(function(input)
     end
 end)
 
--- Единый цикл рендера
+-- Цикл рендера
 RunService.RenderStepped:Connect(function()
     local MousePos = UserInputService:GetMouseLocation()
     FOVCircle.Position = MousePos
@@ -175,14 +174,17 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Переработанная плавная доводка аимбота
     if shouldAim then
         local Target = GetClosestPlayer()
         if Target and Target.Character and Target.Character:FindFirstChild("Head") then
-            local TargetCFrame = CFrame.new(Camera.CFrame.Position, Target.Character.Head.Position)
-            -- Плавность теперь корректно работает через измененный коэффициент сглаживания
-            local t = 1 / math.max(AimbotSmoothness, 1)
-            Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, t)
+            local Head = Target.Character.Head
+            local ScreenPos, OnScreen = Camera:WorldToViewportPoint(Head.Position)
+            if OnScreen then
+                -- Динамический расчет сглаживания для плавной доводки камеры
+                local t = 1 / math.max(AimbotSmoothness, 1)
+                local TargetCFrame = CFrame.new(Camera.CFrame.Position, Head.Position)
+                Camera.CFrame = Camera.CFrame:Lerp(TargetCFrame, t)
+            end
         end
     end
 
@@ -221,7 +223,6 @@ RunService.RenderStepped:Connect(function()
                     data.Name.Visible = false
                 end
                 
-                -- Отображение дистанции строго в метрах (XXm)
                 if ESP_Distance then
                     local studsDist = (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and (LocalPlayer.Character.HumanoidRootPart.Position - hrp.Position).Magnitude) or 0
                     local metersDist = math.floor(studsDist / 20)
@@ -256,7 +257,7 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- Создание элементов управления во вкладке Visuals
+-- UI Visuals
 VisualsTab:CreateToggle({
    Name = "Enable Boxes (2D)",
    CurrentValue = false,
@@ -287,7 +288,7 @@ VisualsTab:CreateToggle({
    Callback = function(Value) ESP_Health = Value end,
 })
 
--- Создание элементов управления во вкладке Combat (Исправлен синтаксис на Default)
+-- UI Combat
 CombatTab:CreateToggle({
    Name = "Enable Aimbot Master",
    CurrentValue = false,
@@ -300,7 +301,8 @@ CombatTab:CreateDropdown({
    CurrentOption = "Hold",
    MultipleOptions = false,
    Callback = function(Option)
-      AimMode = Option[1] or Option
+      local selected = type(Option) == "table" and Option[1] or Option
+      AimMode = selected
       AimbotActiveState = false
    end,
 })
@@ -314,14 +316,12 @@ CombatTab:CreateKeybind({
    end,
 })
 
--- Исправлена критическая ошибка: CurrentValue заменено на Default
 CombatTab:CreateSlider({
    Name = "Aimbot Smoothness",
-   Min = 1,
-   Max = 50,
-   Default = 5,
+   Range = {1, 50},
    Increment = 1,
    Suffix = " smoothness",
+   CurrentValue = 5,
    Callback = function(Value) 
       AimbotSmoothness = Value 
    end,
@@ -329,11 +329,10 @@ CombatTab:CreateSlider({
 
 CombatTab:CreateSlider({
    Name = "FOV Circle Size",
-   Min = 10,
-   Max = 500,
-   Default = 150,
+   Range = {10, 500},
    Increment = 5,
    Suffix = "px",
+   CurrentValue = 150,
    Callback = function(Value) 
       FOVRadius = Value 
    end,
